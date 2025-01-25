@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container d-flex justify-content-center align-items-center min-vh-100">
+        <div class="card p-4 shadow-sm" style="width: 100%; max-width: 800px;">
+            <h3 class="text-center mb-3">Admin Panel</h3>
+            <a href="/mrhjf/logs" class="btn btn-info mb-2">View Logs</a>
+            <a href="/mrhjf/reports" class="btn btn-warning mb-2">View Reports</a>
+            <a href="/mrhjf/access_control" class="btn btn-success mb-2">Access Control</a>
+            <a href="/mrhjf/search_logs" class="btn btn-primary mb-2">Search Logs</a>
+            <a href="/mrhjf/real_time_logs" class="btn btn-secondary mb-2">Real-Time Logs</a>
+            <a href="/mrhjf/chat_logs" class="btn btn-dark mb-2">View Chat Logs</a>
+            <a href="/mrhjf/real_time_chat" class="btn btn-light mb-2">Real-Time Chat</a>
+            <a href="/mrhjf/user_limits" class="btn btn-info mb-2">User Limits</a>
+            <a href="/mrhjf/ip_limits" class="btn btn-warning mb-2">IP Limits</a>
+            <a href="/mrhjf/recovery_requests" class="btn btn-danger mb-2">View Recovery Requests</a>
+            <form action="/mrhjf/backup" method="POST" style="display:inline;">
+                <button type="submit" class="btn btn-dark mb-2">Backup Data</button>
+            </form>
+            <a href="/logout" class="btn btn-danger w-100">Logout</a>
+        </div>
+    </div>
+</body>
+</html>
