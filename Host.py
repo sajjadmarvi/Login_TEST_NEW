@@ -662,11 +662,29 @@ def mrhjf_user_limits():
 def mrhjf_clear_limit():
     if session.get('role') != 'admin':
         return redirect('/')
+    
+    # دریافت کلید و نوع محدودیت از فرم
     key = request.form.get('key')
     limit_type = request.form.get('limit_type')  # 'ip' یا 'user'
+    
+    # بررسی صحت داده‌های ورودی
+    if not key or not limit_type:
+        flash('Invalid key or limit type', 'danger')
+        return redirect('/mrhjf')
+    
+    # حذف محدودیت
     clear_limit(key, limit_type)
+    
+    # ارسال پیام موفقیت‌آمیز
     flash('Limit cleared successfully!', 'success')
-    return redirect(url_for('mrhjf_ip_limits' if limit_type == 'ip' else 'mrhjf_user_limits'))
+    
+    # هدایت به صفحه مربوطه
+    if limit_type == 'ip':
+        return redirect(url_for('mrhjf_ip_limits'))
+    elif limit_type == 'user':
+        return redirect(url_for('mrhjf_user_limits'))
+    else:
+        return redirect('/mrhjf')
 
 if __name__ == '__main__':
     # Create admin user if not exists
