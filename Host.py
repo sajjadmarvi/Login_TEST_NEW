@@ -16,7 +16,7 @@ import secrets
 
 app = Flask(__name__)
 app.config.from_object('config.DevelopmentConfig' if os.environ.get('FLASK_ENV') == 'development' else 'config.ProductionConfig')
-app.secret_key = 'your_secret_key_here'  # کلید مخفی برای session
+app.secret_key = 'your_secret_key_here'
 
 # Initialize extensions
 socketio = SocketIO(app)
@@ -45,7 +45,7 @@ celery = make_celery(app)
 # Telegram Bot Token and ID
 TELEGRAM_BOT_TOKEN = '8000764348:AAEytputhjTO8Sp7QA939fUCm8ja6YQI23I'
 TELEGRAM_BOT_ID = '@Koshole_grooh_bot'
-TELEGRAM_USER_ID = 167514573  # Your Telegram User ID
+TELEGRAM_USER_ID = 167514573
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
 # Helper functions
@@ -136,7 +136,6 @@ def log_action(username, ip_address, action):
     with open('logs.json', 'w', encoding='utf-8') as file:
         json.dump(logs, file, indent=4)
     
-    # Send log to Telegram
     try:
         message = f"📝 *New Log Entry*\n\n👤 *Username*: {username}\n🌐 *IP Address*: {ip_address}\n⏰ *Timestamp*: {log_entry['timestamp']}\n🔧 *Action*: {action}"
         bot.send_message(TELEGRAM_USER_ID, message, parse_mode='Markdown')
@@ -209,19 +208,22 @@ def add_limit(key, limit_type):
     limits[key]['attempts'] += 1
     limits[key]['last_attempt'] = datetime.now().isoformat()
     
-    if limits[key]['attempts'] == 1:
-        limits[key]['limit_until'] = (datetime.now() + timedelta(minutes=1)).isoformat()
-    elif limits[key]['attempts'] == 2:
-        limits[key]['limit_until'] = (datetime.now() + timedelta(hours=1)).isoformat()
-    elif limits[key]['attempts'] >= 3:
-        limits[key]['limit_until'] = (datetime.now() + timedelta(days=1)).isoformat()
+    if limit_type == 'ip':
+        if limits[key]['attempts'] >= 20:
+            limits[key]['limit_until'] = (datetime.now() + timedelta(minutes=1)).isoformat()
+    elif limit_type == 'user':
+        data = load_data()
+        user = next((u for u in data['users'] if u['username'] == key), None)
+        if user:
+            max_attempts = user.get('max_attempts', 3)
+            if limits[key]['attempts'] >= max_attempts:
+                limits[key]['limit_until'] = (datetime.now() + timedelta(hours=1)).isoformat()
     
     if limit_type == 'ip':
         save_ip_limits(limits)
     elif limit_type == 'user':
         save_user_limits(limits)
 
-    # ارسال پیام به مدیر تلگرام در صورت برخورد با محدودیت
     if limits[key]['attempts'] >= 3:
         try:
             message = f"⚠️ *Rate Limit Alert*\n\n🔑 *Key*: {key}\n📊 *Attempts*: {limits[key]['attempts']}\n⏰ *Last Attempt*: {limits[key]['last_attempt']}\n🚫 *Limit Until*: {limits[key]['limit_until']}"
@@ -273,20 +275,18 @@ def login():
     return render_template('login.html')
 
 @app.route('/login', methods=['POST'])
-@limiter.limit("20 per minute")  # محدودیت 20 درخواست در دقیقه برای IP
+@limiter.limit("20 per minute")
 def do_login():
     username = request.form['username']
     password = request.form['password']
     ip_address = request.remote_addr
     data = load_data()
 
-    # بررسی محدودیت برای کاربر
     user = next((u for u in data['users'] if u['username'] == username), None)
     if user and check_limit(username, 'user'):
         flash('You are temporarily locked out. Please try again later.', 'danger')
         return redirect('/')
 
-    # بررسی محدودیت برای IP
     if check_limit(ip_address, 'ip'):
         flash('Your IP is temporarily locked out. Please try again later.', 'danger')
         return redirect('/')
@@ -294,13 +294,13 @@ def do_login():
     if user and check_password(password, user['password']):
         session['username'] = user['username']
         session['role'] = user['role']
+        session['avatar'] = user.get('avatar', 'default_avatar.png')
         log_action(username, ip_address, "Successful Login")
         flash('Login successful!', 'success')
         if user['role'] == 'admin':
             return redirect('/mrhjf')
         return redirect('/chat')
     else:
-        # افزایش تعداد تلاش‌های ناموفق
         add_limit(username, 'user')
         add_limit(ip_address, 'ip')
         log_action(username, ip_address, "Failed Login Attempt")
@@ -314,6 +314,7 @@ def signup():
         password = request.form['password']
         confirm_password = request.form['confirm_password']
         telegram_id = request.form['telegram_id']
+        avatar = request.form.get('avatar', 'default_avatar.png')
         
         if password != confirm_password:
             flash('Passwords do not match!', 'danger')
@@ -324,7 +325,6 @@ def signup():
             flash('Username already exists!', 'danger')
             return redirect('/signup')
         
-        # Generate a random code and send it to the user's Telegram ID
         verification_code = secrets.token_hex(3)
         try:
             bot.send_message(telegram_id, f"Your verification code is: {verification_code}")
@@ -333,12 +333,12 @@ def signup():
             flash('Error sending verification code. Please check your Telegram ID.', 'danger')
             return redirect('/signup')
         
-        # Store the verification code in the session
         session['verification_code'] = verification_code
         session['signup_data'] = {
             'username': username,
             'password': hash_password(password),
             'telegram_id': telegram_id,
+            'avatar': avatar,
             'role': 'user',
             'max_attempts': 3
         }
@@ -374,14 +374,11 @@ def forgot_password():
         data = load_data()
         user = next((u for u in data['users'] if u['username'] == username), None)
         if user:
-            # Generate a password reset token
             token = generate_password_reset_token(username)
             reset_link = url_for('reset_password', token=token, _external=True)
             
-            # Send the reset link via Telegram
             send_password_reset_link(user['telegram_id'], reset_link)
             
-            # Log the recovery request
             recovery_request = {
                 'username': username,
                 'telegram_id': user['telegram_id'],
@@ -429,7 +426,7 @@ def reset_password(token):
 def chat():
     if 'username' not in session:
         return redirect('/')
-    return render_template('chat.html', username=session['username'])
+    return render_template('chat.html', username=session['username'], avatar=session.get('avatar', 'default_avatar.png'))
 
 @app.route('/success')
 def success():
@@ -488,14 +485,16 @@ def mrhjf_update_access():
     role = request.form.get('role')
     password = request.form.get('password')
     max_attempts = request.form.get('max_attempts')
+    avatar = request.form.get('avatar', 'default_avatar.png')
     data = load_data()
     user = next((u for u in data['users'] if u['username'] == username), None)
     if user:
         user['role'] = role
         if password:
-            user['password'] = hash_password(password)  # تغییر پسورد
+            user['password'] = hash_password(password)
         if max_attempts:
-            user['max_attempts'] = int(max_attempts)  # تغییر تعداد تلاش‌ها
+            user['max_attempts'] = int(max_attempts)
+        user['avatar'] = avatar
         save_data(data)
         log_action(session.get('username'), request.remote_addr, f"Updated Access for {username}")
     return redirect('/mrhjf/access_control')
@@ -514,6 +513,7 @@ def add_user():
     telegram_id = request.form.get('telegram_id')
     role = request.form.get('role')
     max_attempts = request.form.get('max_attempts')
+    avatar = request.form.get('avatar', 'default_avatar.png')
     
     data = load_data()
     if any(u['username'] == username for u in data['users']):
@@ -525,7 +525,8 @@ def add_user():
         'password': hash_password(password),
         'telegram_id': telegram_id,
         'role': role,
-        'max_attempts': int(max_attempts)
+        'max_attempts': int(max_attempts),
+        'avatar': avatar
     }
     data['users'].append(new_user)
     save_data(data)
@@ -560,7 +561,6 @@ def mrhjf_search_logs():
         with open('logs.json', 'r', encoding='utf-8') as file:
             logs = json.load(file)
     
-    # Filter logs with None checks
     filtered_logs = [
         log for log in logs 
         if (log.get('username') and query.lower() in log['username'].lower()) or 
@@ -629,19 +629,42 @@ def handle_send_message(data):
     recipient = data.get('recipient')
     message = data.get('message')
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    avatar = session.get('avatar', 'default_avatar.png')
     
     if username and recipient and message:
         chat_message = {
             'sender': username,
             'recipient': recipient,
             'message': message,
-            'timestamp': timestamp
+            'timestamp': timestamp,
+            'avatar': avatar
         }
         messages = load_chat_messages()
         messages.append(chat_message)
         save_chat_messages(messages)
         
         emit('receive_message', chat_message, broadcast=True)
+
+# WebSocket for online users
+online_users = {}
+
+@socketio.on('connect')
+def handle_connect():
+    username = session.get('username')
+    if username:
+        online_users[username] = request.sid
+        emit('update_online_users', [{'username': username, 'avatar': session.get('avatar', 'default_avatar.png')}], broadcast=True)
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    username = session.get('username')
+    if username and username in online_users:
+        del online_users[username]
+        emit('update_online_users', list(online_users.keys()), broadcast=True)
+
+@socketio.on('request_online_users')
+def handle_request_online_users():
+    emit('update_online_users', [{'username': username, 'avatar': session.get('avatar', 'default_avatar.png')} for username in online_users.keys()])
 
 # New Routes for IP and User Limits
 @app.route('/mrhjf/ip_limits')
@@ -663,22 +686,17 @@ def mrhjf_clear_limit():
     if session.get('role') != 'admin':
         return redirect('/')
     
-    # دریافت کلید و نوع محدودیت از فرم
     key = request.form.get('key')
-    limit_type = request.form.get('limit_type')  # 'ip' یا 'user'
+    limit_type = request.form.get('limit_type')
     
-    # بررسی صحت داده‌های ورودی
     if not key or not limit_type:
         flash('Invalid key or limit type', 'danger')
         return redirect('/mrhjf')
     
-    # حذف محدودیت
     clear_limit(key, limit_type)
     
-    # ارسال پیام موفقیت‌آمیز
     flash('Limit cleared successfully!', 'success')
     
-    # هدایت به صفحه مربوطه
     if limit_type == 'ip':
         return redirect(url_for('mrhjf_ip_limits'))
     elif limit_type == 'user':
@@ -686,16 +704,36 @@ def mrhjf_clear_limit():
     else:
         return redirect('/mrhjf')
 
+# New Route for getting chat history
+@app.route('/mrhjf/get_chat_history')
+def get_chat_history():
+    username = request.args.get('username')
+    if not username:
+        return jsonify([])
+    
+    chat_messages = load_chat_messages()
+    user_messages = [msg for msg in chat_messages if msg['sender'] == username or msg['recipient'] == username]
+    return jsonify(user_messages)
+
+# New Route for viewing chat history
+@app.route('/mrhjf/chat_history')
+def mrhjf_chat_history():
+    if session.get('role') != 'admin':
+        return redirect('/')
+    username = request.args.get('username')
+    return render_template('chat_history.html', username=username)
+
 if __name__ == '__main__':
     # Create admin user if not exists
     data = load_data()
     if not any(u['username'] == 'Alireza_jf' for u in data['users']):
         admin_user = {
             'username': 'Alireza_jf',
-            'password': hash_password('mrhjf5780'),  # رمز عبور پیش‌فرض
-            'telegram_id': 'admin_telegram_id',  # آیدی تلگرام مدیر
+            'password': hash_password('mrhjf5780'),
+            'telegram_id': 'admin_telegram_id',
             'role': 'admin',
-            'max_attempts': 3
+            'max_attempts': 3,
+            'avatar': 'default_avatar.png'
         }
         data['users'].append(admin_user)
         save_data(data)
