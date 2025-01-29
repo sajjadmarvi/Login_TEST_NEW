@@ -10,13 +10,6 @@
     <div class="container d-flex justify-content-center align-items-center min-vh-100">
         <div class="card p-4 shadow-sm" style="width: 100%; max-width: 350px;">
             <h3 class="text-center mb-3">Sign Up</h3>
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ category }}">{{ message }}</div>
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
             <form action="/signup" method="POST">
                 <div class="mb-3">
                     <input type="text" name="username" class="form-control" placeholder="Username" required>
@@ -38,5 +31,21 @@
             <p class="text-center mt-3">Already have an account? <a href="/">Log in</a></p>
         </div>
     </div>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const form = document.querySelector("form");
+            const usernameInput = form.querySelector('input[name="username"]');
+
+            form.addEventListener("submit", function (e) {
+                const username = usernameInput.value;
+                const usernameRegex = /^[a-zA-Z0-9_-s]+$/; // فقط حروف و اعداد
+
+                if (!usernameRegex.test(username)) {
+                    e.preventDefault(); // جلوگیری از ارسال فرم
+                    alert("Username can only contain letters and numbers, and no spaces or special characters.");
+                }
+            });
+        });
+    </script>
 </body>
 </html>
